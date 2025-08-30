@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/script.js": {
+      "runtime": "nodejs18.x"
+    }
+  }
+}
