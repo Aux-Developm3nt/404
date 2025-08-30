@@ -1,0 +1,13 @@
+{
+  "name": "404-script",
+  "version": "1.0.0",
+  "description": "404 Script Loader",
+  "main": "api/script.js",
+  "scripts": {
+    "start": "node api/script.js"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": "18.x"
+  }
+}
