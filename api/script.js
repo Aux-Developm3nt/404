@@ -3,7 +3,7 @@ module.exports = async (req, res) => {
   
   if (userAgent.includes('Roblox') || !userAgent.includes('Mozilla')) {
     try {
-      // URL is hidden in environment variables - not visible in source
+      // what are you doing here
       const scriptUrl = process.env.SCRIPT_URL;
       const response = await fetch(scriptUrl);
       let scriptContent = await response.text();
