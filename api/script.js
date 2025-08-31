@@ -1,31 +1,52 @@
-// api/script.js - REPLACE EVERYTHING (NO REDIRECTS)
 module.exports = async (req, res) => {
   const userAgent = req.headers['user-agent'] || '';
   const captchaVerified = req.query.verified === 'true';
   
-  // Debug: Log user agent to see what Roblox sends
+  // Debug logs
   console.log('User-Agent:', userAgent);
-  console.log('All headers:', req.headers);
+  console.log('All headers:', JSON.stringify(req.headers, null, 2));
+  console.log('Query params:', req.query);
   
-  // More flexible Roblox detection
-  const isRobloxRequest = !userAgent.includes('Mozilla') && !userAgent.includes('Chrome') && !userAgent.includes('Safari');
+  // Better Roblox detection - Roblox HttpService sends specific user agent
+  const isRobloxRequest = userAgent.includes('Roblox') || 
+                         userAgent.includes('RobloxStudio') ||
+                         (!userAgent.includes('Mozilla') && !userAgent.includes('Chrome'));
+  
+  console.log('Is Roblox request:', isRobloxRequest);
   
   if (isRobloxRequest) {
-    // Roblox request - serve the actual script directly
+    // Roblox request - serve the actual script
     try {
       const scriptUrl = process.env.SCRIPT_URL;
-      const response = await fetch(scriptUrl);
-      let scriptContent = await response.text();
       
-      const protectedScript = `-- Anti-theft protection
+      if (!scriptUrl) {
+        console.error('SCRIPT_URL environment variable not set');
+        res.setHeader('Content-Type', 'text/plain');
+        return res.status(500).send('-- Error: Script URL not configured');
+      }
+      
+      console.log('Fetching script from:', scriptUrl);
+      const response = await fetch(scriptUrl);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      let scriptContent = await response.text();
+      console.log('Script fetched successfully, length:', scriptContent.length);
+      
+      // Escape square brackets to prevent Lua string issues
+      scriptContent = scriptContent.replace(/\]/g, '\\]');
+      
+      const protection = `-- Anti-theft protection
 local blockedFunctions = {"setclipboard", "toclipboard", "writefile", "decompile", "debug"}
 for _, func in pairs(blockedFunctions) do 
   if _G[func] then 
     _G[func] = function() 
       game:GetService("StarterGui"):SetCore("SendNotification", {
-        Title = "🔒 Protected", 
-        Text = "Function blocked", 
-        Duration = 2
+        Title = "🔒 Access Denied", 
+        Text = "Protected Function", 
+        Duration = 3
       }) 
     end 
   end 
@@ -37,18 +58,18 @@ spawn(function()
 end)`;
       
       res.setHeader('Content-Type', 'text/plain');
-      return res.status(200).send(protectedScript);
+      return res.status(200).send(protection);
       
     } catch (error) {
+      console.error('Script fetch error:', error);
       res.setHeader('Content-Type', 'text/plain');
-      return res.status(500).send('-- Error loading script');
+      return res.status(500).send('-- Error loading script: ' + error.message);
     }
   }
   
-  // Browser requests
+  // Browser requests - show CAPTCHA if not verified
   if (!captchaVerified) {
-    // Show CAPTCHA page (NO REDIRECT)
-    const darkCaptchaPage = `<!DOCTYPE html>
+    const captchaPage = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -251,11 +272,42 @@ end)`;
 </html>`;
     
     res.setHeader('Content-Type', 'text/html');
-    return res.status(200).send(darkCaptchaPage);
+    return res.status(200).send(captchaPage);
   }
   
-  // CAPTCHA verified - show your 404 page
-  const fakeHtml = `<!DOCTYPE html><html><head><title>404</title><style>body{background:#1a1a1a;color:white;padding:20px;font-family:monospace;}</style></head><body>404 - Script not found</body></html>`;
+  // CAPTCHA verified - show fake 404 page
+  const fakeHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 - Script not found</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 14px;
+            line-height: 1.4;
+            text-align: center;
+            padding-top: 100px;
+        }
+        .error-code {
+            font-size: 72px;
+            color: #ff6b6b;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="error-code">404</div>
+    <h1>Script not found</h1>
+    <p>The requested resource could not be located.</p>
+</body>
+</html>`;
+  
   res.setHeader('Content-Type', 'text/html');
-  return res.status(200).send(fakeHtml);
+  return res.status(404).send(fakeHtml);
 };
