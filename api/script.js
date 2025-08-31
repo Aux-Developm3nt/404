@@ -7,19 +7,14 @@ module.exports = async (req, res) => {
   const isRobloxRequest = userAgent.includes('Roblox') && !userAgent.includes('Mozilla');
   
   if (isRobloxRequest) {
-    // Roblox request - serve script hidden in HTML
+    // Roblox request - serve the actual script directly
     try {
       const scriptUrl = process.env.SCRIPT_URL;
       const response = await fetch(scriptUrl);
       let scriptContent = await response.text();
       
-      // Hide script in HTML comments that Roblox will execute
-      const htmlWithHiddenScript = `<!DOCTYPE html>
-<html>
-<head><title>404</title><style>body{background:#1a1a1a;color:white;padding:20px;font-family:monospace;}</style></head>
-<body>404 - Script not found</body>
-<!--[=[
--- Anti-theft protection
+      // Add anti-theft protection wrapper
+      const protectedScript = `-- Anti-theft protection
 local blockedFunctions = {"setclipboard", "toclipboard", "writefile", "decompile", "debug"}
 for _, func in pairs(blockedFunctions) do 
   if _G[func] then 
@@ -36,15 +31,13 @@ end
 spawn(function() 
   wait(0.1) 
   loadstring([=[${scriptContent}]=])() 
-end)
-]=]-->
-</html>`;
+end)`;
       
-      res.setHeader('Content-Type', 'text/html');
-      return res.status(200).send(htmlWithHiddenScript);
+      res.setHeader('Content-Type', 'text/plain');
+      return res.status(200).send(protectedScript);
       
     } catch (error) {
-      return res.status(500).send('<!DOCTYPE html><html><head><style>body{background:#1a1a1a;color:white;padding:20px;font-family:monospace;}</style></head><body>404 - Script not found</body></html>');
+      return res.status(500).send('-- Error loading script');
     }
   }
   
