@@ -5,17 +5,23 @@ module.exports = async (req, res) => {
   // Debug logs
   console.log('User-Agent:', userAgent);
   console.log('All headers:', JSON.stringify(req.headers, null, 2));
-  console.log('Query params:', req.query);
   
-  // Better Roblox detection - Roblox HttpService sends specific user agent
+  // Enhanced Roblox/Executor detection
   const isRobloxRequest = userAgent.includes('Roblox') || 
                          userAgent.includes('RobloxStudio') ||
-                         (!userAgent.includes('Mozilla') && !userAgent.includes('Chrome'));
+                         userAgent.includes('executor') ||
+                         userAgent.includes('syn') ||
+                         userAgent.includes('krnl') ||
+                         userAgent.includes('script-ware') ||
+                         (!userAgent.includes('Mozilla') && 
+                          !userAgent.includes('Chrome') && 
+                          !userAgent.includes('Safari') &&
+                          !userAgent.includes('Edge'));
   
-  console.log('Is Roblox request:', isRobloxRequest);
+  console.log('Is Roblox/Executor request:', isRobloxRequest);
   
   if (isRobloxRequest) {
-    // Roblox request - serve the actual script
+    // Executor request - serve the actual script
     try {
       const scriptUrl = process.env.SCRIPT_URL;
       
@@ -35,29 +41,35 @@ module.exports = async (req, res) => {
       let scriptContent = await response.text();
       console.log('Script fetched successfully, length:', scriptContent.length);
       
-      // Escape square brackets to prevent Lua string issues
-      scriptContent = scriptContent.replace(/\]/g, '\\]');
+      // Escape square brackets and quotes to prevent Lua string issues
+      scriptContent = scriptContent.replace(/\]/g, '\\]').replace(/\\/g, '\\\\');
       
-      const protection = `-- Anti-theft protection
-local blockedFunctions = {"setclipboard", "toclipboard", "writefile", "decompile", "debug"}
-for _, func in pairs(blockedFunctions) do 
-  if _G[func] then 
-    _G[func] = function() 
-      game:GetService("StarterGui"):SetCore("SendNotification", {
-        Title = "🔒 Access Denied", 
-        Text = "Protected Function", 
-        Duration = 3
-      }) 
+      const protection = `-- Script Loader with Protection
+pcall(function()
+  local blockedFunctions = {"setclipboard", "toclipboard", "writefile", "decompile", "debug"}
+  for _, func in pairs(blockedFunctions) do 
+    if _G[func] then 
+      _G[func] = function() 
+        warn("🔒 Protected function blocked: " .. func)
+      end 
     end 
-  end 
-end
+  end
+end)
 
+-- Load the actual script
 spawn(function() 
   wait(0.1) 
-  loadstring([=[${scriptContent}]=])() 
+  local success, result = pcall(function()
+    return loadstring([=[${scriptContent}]=])()
+  end)
+  
+  if not success then
+    warn("Script load error: " .. tostring(result))
+  end
 end)`;
       
       res.setHeader('Content-Type', 'text/plain');
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       return res.status(200).send(protection);
       
     } catch (error) {
@@ -76,11 +88,7 @@ end)`;
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Verification Required</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -116,16 +124,8 @@ end)`;
             background-clip: text;
         }
         
-        h1 { 
-            color: #ffffff; 
-            margin-bottom: 10px;
-            font-size: 24px;
-        }
-        
-        p {
-            color: #aaa;
-            margin-bottom: 30px;
-        }
+        h1 { color: #ffffff; margin-bottom: 10px; font-size: 24px; }
+        p { color: #aaa; margin-bottom: 30px; }
         
         .math-problem {
             background: #1a1a1a;
@@ -152,10 +152,7 @@ end)`;
             transition: border-color 0.3s;
         }
         
-        .answer-input:focus {
-            outline: none;
-            border-color: #4ecdc4;
-        }
+        .answer-input:focus { outline: none; border-color: #4ecdc4; }
         
         .verify-btn {
             background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
@@ -193,11 +190,7 @@ end)`;
             border: 1px solid rgba(78, 205, 196, 0.3);
         }
         
-        .footer {
-            margin-top: 30px;
-            color: #666;
-            font-size: 12px;
-        }
+        .footer { margin-top: 30px; color: #666; font-size: 12px; }
     </style>
 </head>
 <body>
@@ -215,7 +208,6 @@ end)`;
         </div>
         
         <div id="message"></div>
-        
         <div class="footer">404-hub.vercel.app</div>
     </div>
 
@@ -264,7 +256,6 @@ end)`;
             if (e.key === 'Enter') verify();
         });
         
-        // Initialize
         generateProblem();
         document.getElementById('answer').focus();
     </script>
@@ -275,24 +266,18 @@ end)`;
     return res.status(200).send(captchaPage);
   }
   
-  // CAPTCHA verified - show fake 404 page
+  // CAPTCHA verified - show fake 404
   const fakeHtml = `<!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>404 - Script not found</title>
+    <title>404 - Not Found</title>
     <style>
         body {
-            margin: 0;
-            padding: 20px;
-            background-color: #1a1a1a;
-            color: #ffffff;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            font-size: 14px;
-            line-height: 1.4;
+            background: #1a1a1a;
+            color: white;
+            padding: 40px;
+            font-family: 'Courier New', monospace;
             text-align: center;
-            padding-top: 100px;
         }
         .error-code {
             font-size: 72px;
