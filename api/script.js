@@ -26,53 +26,43 @@ module.exports = async (req, res) => {
       
       let scriptContent = await response.text();
       
-      // SIMPLE BUT EFFECTIVE Anti-Skidder Protection
-      const protectedScript = `-- Anti-Skidder Protection
--- Prevents clipboard theft and source extraction
+      // WORKING Anti-Skidder Protection
+      const protectedScript = `-- Anti-Skidder Protection System
+-- Blocks clipboard theft and protects source
 
--- Immediately block skidder functions
-local function blockSkidders()
-    local blocked = {"setclipboard", "toclipboard", "writefile", "saveinstance"}
-    for _, func in pairs(blocked) do
-        if _G[func] then
-            _G[func] = function()
-                warn("🚫 " .. func .. " blocked!")
-                return nil
-            end
+-- Block skidder functions first
+local blockedFuncs = {"setclipboard", "toclipboard", "writefile", "saveinstance", "decompile"}
+for _, funcName in pairs(blockedFuncs) do
+    if _G[funcName] then
+        _G[funcName] = function()
+            warn("🚫 Function blocked: " .. funcName)
+            return nil
         end
     end
 end
 
--- Execute protection first
-blockSkidders()
-
--- Create execution environment
-local function executeProtected()
-    -- Random delay to prevent timing attacks
-    wait(math.random(1, 3) / 10)
-    
-    -- Execute in protected environment
-    local success, error = pcall(function()
-        ${scriptContent}
+-- Execute your script in protected environment
+spawn(function()
+    wait(0.1)
+    local success, err = pcall(function()
+        loadstring([[${scriptContent.replace(/\\/g, '\\\\').replace(/\]/g, '\\]').replace(/"/g, '\\"')}]])()
     end)
     
     if not success then
-        warn("Script error: " .. tostring(error))
-    end
-end
-
--- Start protected execution
-spawn(executeProtected)
-
--- Continuous anti-tampering
-spawn(function()
-    while wait(2) do
-        blockSkidders()
+        warn("Execution error: " .. tostring(err))
     end
 end)
 
--- Fake source for skidders who try to print/copy
-_G._SCRIPT_SOURCE = "-- Nice try! This is fake source code lol"`;
+-- Anti-tampering monitor
+spawn(function()
+    while wait(3) do
+        for _, func in pairs(blockedFuncs) do
+            if _G[func] and type(_G[func]) ~= "function" then
+                _G[func] = function() return nil end
+            end
+        end
+    end
+end)`;
       
       res.setHeader('Content-Type', 'text/plain');
       res.setHeader('Cache-Control', 'no-cache');
