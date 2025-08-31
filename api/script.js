@@ -1,14 +1,13 @@
-// api/script.js - REPLACE EVERYTHING
+// api/script.js - REPLACE EVERYTHING (NO REDIRECTS)
 module.exports = async (req, res) => {
   const userAgent = req.headers['user-agent'] || '';
   const captchaVerified = req.query.verified === 'true';
-  const showCaptcha = req.query.captcha === 'true';
   
   // Check if request is from Roblox
   const isRobloxRequest = userAgent.includes('Roblox') && !userAgent.includes('Mozilla');
   
   if (isRobloxRequest) {
-    // Roblox request - serve the actual script
+    // Roblox request - serve the actual script directly
     try {
       const scriptUrl = process.env.SCRIPT_URL;
       const response = await fetch(scriptUrl);
@@ -38,19 +37,13 @@ end)`;
       
     } catch (error) {
       res.setHeader('Content-Type', 'text/plain');
-      return res.status(500).send('-- Error');
+      return res.status(500).send('-- Error loading script');
     }
   }
   
-  // Browser request - check if need to show CAPTCHA
-  if (!captchaVerified && !showCaptcha) {
-    // Redirect to show CAPTCHA
-    const captchaUrl = req.url + (req.url.includes('?') ? '&' : '?') + 'captcha=true';
-    return res.redirect(captchaUrl);
-  }
-  
-  if (showCaptcha && !captchaVerified) {
-    // Show CAPTCHA page
+  // Browser requests
+  if (!captchaVerified) {
+    // Show CAPTCHA page (NO REDIRECT)
     const darkCaptchaPage = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -233,11 +226,7 @@ end)`;
             if (userAnswer === correctAnswer) {
                 messageDiv.innerHTML = '<div class="success">✅ Correct! Redirecting...</div>';
                 setTimeout(() => {
-                    // Remove captcha=true and add verified=true
-                    const url = new URL(window.location);
-                    url.searchParams.delete('captcha');
-                    url.searchParams.set('verified', 'true');
-                    window.location.href = url.toString();
+                    window.location.href = window.location.pathname + '?verified=true';
                 }, 1500);
             } else {
                 messageDiv.innerHTML = '<div class="error">❌ Wrong answer. Try again.</div>';
@@ -261,7 +250,7 @@ end)`;
     return res.status(200).send(darkCaptchaPage);
   }
   
-  // CAPTCHA verified - show your current 404 style
+  // CAPTCHA verified - show 404 page
   const fakeHtml = `<!DOCTYPE html><html><head><title>404</title><style>body{background:#1a1a1a;color:white;padding:20px;font-family:monospace;}</style></head><body>404 - Script not found</body></html>`;
   res.setHeader('Content-Type', 'text/html');
   return res.status(200).send(fakeHtml);
