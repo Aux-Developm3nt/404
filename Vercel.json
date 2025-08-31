@@ -1,6 +1,7 @@
 {
-  "routes": [
-    { "src": "/captcha", "dest": "/captcha.html" },
-    { "src": "/api/(.*)", "dest": "/api/$1" }
-  ]
+  "functions": {
+    "api/script.js": {
+      "runtime": "nodejs18.x"
+    }
+  }
 }
