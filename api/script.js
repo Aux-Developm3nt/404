@@ -26,52 +26,134 @@ module.exports = async (req, res) => {
       
       let scriptContent = await response.text();
       
-      // WORKING Anti-Skidder Protection
-      const protectedScript = `-- Anti-Skidder Protection System
--- Blocks clipboard theft and protects source
+      // ANTI-SKIDDER PROTECTION
+      const protectedScript = `-- Anti-Skid
+-- Blocks clipboard theft and decompilation
 
--- Block skidder functions first
-local blockedFuncs = {"setclipboard", "toclipboard", "writefile", "saveinstance", "decompile"}
-for _, funcName in pairs(blockedFuncs) do
-    if _G[funcName] then
-        _G[funcName] = function()
-            warn("🚫 Function blocked: " .. funcName)
-            return nil
+local executionKey = tostring(math.random(100000, 999999)) .. tostring(tick())
+
+local function blockSkidderFunctions()
+    local blockedFunctions = {
+        "setclipboard", "toclipboard", "writefile", "saveinstance",
+        "decompile", "debug", "getrawmetatable", "getgenv", "getrenv",
+        "getfenv", "setfenv", "newcclosure", "hookfunction", "hookmetamethod"
+    }
+    
+    for _, funcName in pairs(blockedFunctions) do
+        if _G[funcName] then
+            _G[funcName] = function(...)
+                game:GetService("StarterGui"):SetCore("SendNotification", {
+                    Title = "🔒 Access Denied",
+                    Text = "Function " .. funcName .. " is protected",
+                    Duration = 3
+                })
+                warn("🚫 Blocked skidder function: " .. funcName)
+                return nil
+            end
         end
     end
 end
 
--- Execute your script in protected environment
-spawn(function()
-    wait(0.1)
-    local success, err = pcall(function()
-        loadstring([[${scriptContent.replace(/\\/g, '\\\\').replace(/\]/g, '\\]').replace(/"/g, '\\"')}]])()
-    end)
+local function antiDebug()
+    local mt = getrawmetatable(game)
+    local oldNamecall = mt.__namecall
     
-    if not success then
-        warn("Execution error: " .. tostring(err))
-    end
-end)
-
--- Anti-tampering monitor
-spawn(function()
-    while wait(3) do
-        for _, func in pairs(blockedFuncs) do
-            if _G[func] and type(_G[func]) ~= "function" then
-                _G[func] = function() return nil end
+    setreadonly(mt, false)
+    mt.__namecall = function(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+        
+        if method == "HttpGet" and tostring(self) == "HttpService" then
+            local url = args[1]
+            if url and url:find("404%-hub%.vercel%.app") and not url:find("loadstring") then
+                warn("🚫 Direct source access blocked!")
+                return "-- Access denied"
             end
+        end
+        
+        return oldNamecall(self, ...)
+    end
+    setreadonly(mt, true)
+end
+
+blockSkidderFunctions()
+pcall(antiDebug)
+
+local function executeScript()
+    local encoder = {
+        [1] = function(s) return s:reverse() end,
+        [2] = function(s) return s:gsub(".", function(c) return string.char(c:byte() + 1) end) end,
+        [3] = function(s) return s end
+    }
+    
+    local method = math.random(1, 3)
+    local encoded = "${Buffer.from(scriptContent).toString('base64')}"
+    
+    spawn(function()
+        wait(math.random() * 0.5 + 0.1)
+        
+        local success, decoded = pcall(function()
+            local base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+            local decoded = ""
+            encoded = encoded:gsub("[^"..base64Chars.."=]", "")
+            
+            for i = 1, #encoded, 4 do
+                local chunk = encoded:sub(i, i + 3)
+                local bits = 0
+                local bitCount = 0
+                
+                for j = 1, #chunk do
+                    local char = chunk:sub(j, j)
+                    if char ~= "=" then
+                        local value = base64Chars:find(char) - 1
+                        bits = bits * 64 + value
+                        bitCount = bitCount + 6
+                    end
+                end
+                
+                while bitCount >= 8 do
+                    bitCount = bitCount - 8
+                    decoded = decoded .. string.char(math.floor(bits / (2^bitCount)) % 256)
+                end
+            end
+            
+            return decoded
+        end)
+        
+        if success and decoded then
+            local execSuccess, execError = pcall(function()
+                return loadstring(decoded)()
+            end)
+            
+            if not execSuccess then
+                warn("Execution error: " .. tostring(execError))
+            end
+        else
+            warn("Decode error")
+        end
+    end)
+end
+
+executeScript()
+
+spawn(function()
+    while wait(5) do
+        if _G.setclipboard or _G.toclipboard then
+            warn("🚫 Clipboard access detected - blocking")
+            _G.setclipboard = nil
+            _G.toclipboard = nil
         end
     end
 end)`;
       
       res.setHeader('Content-Type', 'text/plain');
-      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       return res.status(200).send(protectedScript);
       
     } catch (error) {
       console.error('Error:', error);
       res.setHeader('Content-Type', 'text/plain');
-      return res.status(500).send('-- Service error');
+      return res.status(500).send('-- Service unavailable');
     }
   }
   
@@ -102,8 +184,6 @@ end)`;
             border: 1px solid #333;
         }
         .logo { font-size: 48px; margin-bottom: 20px; }
-        h1 { margin-bottom: 10px; }
-        p { color: #aaa; margin-bottom: 30px; }
         .math-problem {
             background: #1a1a1a;
             padding: 25px;
@@ -111,7 +191,6 @@ end)`;
             color: #4ecdc4;
             border-radius: 8px;
             margin: 20px 0;
-            border: 2px solid #333;
         }
         .answer-input {
             background: #1a1a1a;
@@ -121,7 +200,6 @@ end)`;
             border-radius: 8px;
             width: 120px;
             text-align: center;
-            margin: 10px;
         }
         .verify-btn {
             background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
@@ -140,7 +218,7 @@ end)`;
     <div class="container">
         <div class="logo">🔐</div>
         <h1>Human Verification</h1>
-        <p>Complete verification to continue</p>
+        <p>Solve to continue</p>
         <div class="math-problem" id="problem"></div>
         <input type="number" class="answer-input" id="answer" placeholder="?">
         <br>
@@ -173,7 +251,7 @@ end)`;
                 msg.innerHTML = '<div class="success">✅ Verified!</div>';
                 setTimeout(() => location.href = '?verified=true', 1000);
             } else {
-                msg.innerHTML = '<div class="error">❌ Wrong answer</div>';
+                msg.innerHTML = '<div class="error">❌ Wrong</div>';
                 newProblem();
                 document.getElementById('answer').value = '';
             }
