@@ -2,10 +2,13 @@
 module.exports = async (req, res) => {
   const userAgent = req.headers['user-agent'] || '';
   const captchaVerified = req.query.verified === 'true';
-  const robloxKey = req.query.roblox === 'true';
   
-  // Check if request is from Roblox
-  const isRobloxRequest = robloxKey || (!userAgent.includes('Mozilla') && !userAgent.includes('Chrome'));
+  // Debug: Log user agent to see what Roblox sends
+  console.log('User-Agent:', userAgent);
+  console.log('All headers:', req.headers);
+  
+  // More flexible Roblox detection
+  const isRobloxRequest = !userAgent.includes('Mozilla') && !userAgent.includes('Chrome') && !userAgent.includes('Safari');
   
   if (isRobloxRequest) {
     // Roblox request - serve the actual script directly
