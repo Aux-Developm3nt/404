@@ -1,37 +1,31 @@
 module.exports = async (req, res) => {
   const userAgent = req.headers['user-agent'] || '';
-  const captchaVerified = req.query.verified === 'true';
   
-  // Debug logs
   console.log('User-Agent:', userAgent);
-  console.log('All headers:', JSON.stringify(req.headers, null, 2));
+  console.log('Headers:', req.headers);
   
-  // Enhanced Roblox/Executor detection
+  // Detect Roblox/Executor requests - BYPASS CAPTCHA for these
   const isRobloxRequest = userAgent.includes('Roblox') || 
                          userAgent.includes('RobloxStudio') ||
-                         userAgent.includes('executor') ||
-                         userAgent.includes('syn') ||
-                         userAgent.includes('krnl') ||
-                         userAgent.includes('script-ware') ||
                          (!userAgent.includes('Mozilla') && 
                           !userAgent.includes('Chrome') && 
                           !userAgent.includes('Safari') &&
                           !userAgent.includes('Edge'));
   
-  console.log('Is Roblox/Executor request:', isRobloxRequest);
+  console.log('Is Roblox request:', isRobloxRequest);
   
   if (isRobloxRequest) {
-    // Executor request - serve the actual script
+    // Roblox/Executor request - DIRECTLY serve script (no CAPTCHA needed)
     try {
       const scriptUrl = process.env.SCRIPT_URL;
       
       if (!scriptUrl) {
-        console.error('SCRIPT_URL environment variable not set');
+        console.error('SCRIPT_URL not set');
         res.setHeader('Content-Type', 'text/plain');
-        return res.status(500).send('-- Error: Script URL not configured');
+        return res.status(500).send('-- Error: Configuration missing');
       }
       
-      console.log('Fetching script from:', scriptUrl);
+      console.log('Fetching from:', scriptUrl);
       const response = await fetch(scriptUrl);
       
       if (!response.ok) {
@@ -39,49 +33,42 @@ module.exports = async (req, res) => {
       }
       
       let scriptContent = await response.text();
-      console.log('Script fetched successfully, length:', scriptContent.length);
+      console.log('Script loaded, length:', scriptContent.length);
       
-      // Escape square brackets and quotes to prevent Lua string issues
-      scriptContent = scriptContent.replace(/\]/g, '\\]').replace(/\\/g, '\\\\');
-      
-      const protection = `-- Script Loader with Protection
-pcall(function()
-  local blockedFunctions = {"setclipboard", "toclipboard", "writefile", "decompile", "debug"}
-  for _, func in pairs(blockedFunctions) do 
-    if _G[func] then 
-      _G[func] = function() 
-        warn("🔒 Protected function blocked: " .. func)
-      end 
-    end 
-  end
-end)
+      // Simple protection wrapper
+      const wrappedScript = `-- Protected Script Loader
+print("🔄 Loading script...")
 
--- Load the actual script
-spawn(function() 
-  wait(0.1) 
-  local success, result = pcall(function()
-    return loadstring([=[${scriptContent}]=])()
+spawn(function()
+  wait(0.1)
+  local success, err = pcall(function()
+    ${scriptContent}
   end)
   
-  if not success then
-    warn("Script load error: " .. tostring(result))
+  if success then
+    print("✅ Script loaded successfully!")
+  else
+    warn("❌ Script error: " .. tostring(err))
   end
 end)`;
       
       res.setHeader('Content-Type', 'text/plain');
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      return res.status(200).send(protection);
+      res.setHeader('Cache-Control', 'no-cache');
+      return res.status(200).send(wrappedScript);
       
     } catch (error) {
-      console.error('Script fetch error:', error);
+      console.error('Fetch error:', error);
       res.setHeader('Content-Type', 'text/plain');
-      return res.status(500).send('-- Error loading script: ' + error.message);
+      return res.status(500).send('-- Fetch error: ' + error.message);
     }
   }
   
-  // Browser requests - show CAPTCHA if not verified
+  // Browser requests - check for CAPTCHA verification
+  const captchaVerified = req.query.verified === 'true';
+  
   if (!captchaVerified) {
-    const captchaPage = `<!DOCTYPE html>
+    // Show CAPTCHA to browsers only
+    const captchaHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -89,164 +76,109 @@ end)`;
     <title>Verification Required</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Segoe UI', sans-serif;
             background: #0a0a0a;
-            color: #ffffff;
+            color: #fff;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            background-image: 
-                radial-gradient(circle at 25% 25%, #1a1a2e 0%, transparent 50%),
-                radial-gradient(circle at 75% 75%, #16213e 0%, transparent 50%);
         }
-        
         .container {
             background: rgba(30, 30, 30, 0.9);
-            backdrop-filter: blur(10px);
             border: 1px solid #333;
             padding: 40px;
             border-radius: 15px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
             text-align: center;
             max-width: 400px;
             width: 90%;
         }
-        
-        .logo { 
-            font-size: 48px; 
-            margin-bottom: 10px;
-            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        
-        h1 { color: #ffffff; margin-bottom: 10px; font-size: 24px; }
+        .logo { font-size: 48px; margin-bottom: 20px; }
+        h1 { margin-bottom: 10px; }
         p { color: #aaa; margin-bottom: 30px; }
-        
         .math-problem {
             background: #1a1a1a;
             border: 2px solid #333;
-            border-radius: 8px;
             padding: 25px;
             font-size: 28px;
-            margin: 25px 0;
-            font-weight: bold;
             color: #4ecdc4;
-            font-family: 'Courier New', monospace;
+            border-radius: 8px;
+            margin: 20px 0;
         }
-        
         .answer-input {
             background: #1a1a1a;
             border: 2px solid #333;
             color: white;
             padding: 15px;
             border-radius: 8px;
-            font-size: 18px;
             width: 120px;
             text-align: center;
-            margin: 15px;
-            transition: border-color 0.3s;
+            margin: 10px;
         }
-        
-        .answer-input:focus { outline: none; border-color: #4ecdc4; }
-        
         .verify-btn {
             background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
             color: white;
             border: none;
             padding: 15px 30px;
             border-radius: 25px;
-            font-size: 16px;
             cursor: pointer;
-            margin: 15px;
-            transition: transform 0.2s, box-shadow 0.2s;
-            font-weight: bold;
+            margin: 10px;
         }
-        
-        .verify-btn:hover { 
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(255, 107, 107, 0.3);
-        }
-        
-        .error { 
-            color: #ff6b6b; 
-            margin: 15px 0;
-            background: rgba(255, 107, 107, 0.1);
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid rgba(255, 107, 107, 0.3);
-        }
-        
-        .success { 
-            color: #4ecdc4; 
-            margin: 15px 0;
-            background: rgba(78, 205, 196, 0.1);
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid rgba(78, 205, 196, 0.3);
-        }
-        
-        .footer { margin-top: 30px; color: #666; font-size: 12px; }
+        .error { color: #ff6b6b; margin: 15px 0; }
+        .success { color: #4ecdc4; margin: 15px 0; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="logo">🔐</div>
         <h1>Verification Required</h1>
-        <p>Solve this math problem to continue</p>
+        <p>Complete this verification to continue</p>
         
-        <div class="math-problem" id="mathProblem"></div>
+        <div class="math-problem" id="problem"></div>
         
-        <div>
-            <input type="number" class="answer-input" id="answer" placeholder="Answer">
-            <br>
-            <button class="verify-btn" onclick="verify()">Verify</button>
-        </div>
+        <input type="number" class="answer-input" id="answer" placeholder="Answer">
+        <br>
+        <button class="verify-btn" onclick="verify()">Verify</button>
         
         <div id="message"></div>
-        <div class="footer">404-hub.vercel.app</div>
     </div>
 
     <script>
         let correctAnswer = 0;
         
         function generateProblem() {
-            const num1 = Math.floor(Math.random() * 15) + 5;
-            const num2 = Math.floor(Math.random() * 15) + 5;
-            const operations = ['+', '-'];
-            const op = operations[Math.floor(Math.random() * operations.length)];
+            const a = Math.floor(Math.random() * 15) + 5;
+            const b = Math.floor(Math.random() * 15) + 5;
+            const op = Math.random() < 0.5 ? '+' : '-';
             
             if (op === '+') {
-                correctAnswer = num1 + num2;
-                document.getElementById('mathProblem').textContent = num1 + ' + ' + num2 + ' = ?';
+                correctAnswer = a + b;
+                document.getElementById('problem').textContent = a + ' + ' + b + ' = ?';
             } else {
-                const bigger = Math.max(num1, num2);
-                const smaller = Math.min(num1, num2);
-                correctAnswer = bigger - smaller;
-                document.getElementById('mathProblem').textContent = bigger + ' - ' + smaller + ' = ?';
+                const big = Math.max(a, b);
+                const small = Math.min(a, b);
+                correctAnswer = big - small;
+                document.getElementById('problem').textContent = big + ' - ' + small + ' = ?';
             }
         }
         
         function verify() {
-            const userAnswer = parseInt(document.getElementById('answer').value);
-            const messageDiv = document.getElementById('message');
+            const answer = parseInt(document.getElementById('answer').value);
+            const msg = document.getElementById('message');
             
-            if (isNaN(userAnswer)) {
-                messageDiv.innerHTML = '<div class="error">❌ Please enter a number</div>';
+            if (isNaN(answer)) {
+                msg.innerHTML = '<div class="error">❌ Enter a number</div>';
                 return;
             }
             
-            if (userAnswer === correctAnswer) {
-                messageDiv.innerHTML = '<div class="success">✅ Correct! Redirecting...</div>';
+            if (answer === correctAnswer) {
+                msg.innerHTML = '<div class="success">✅ Correct! Redirecting...</div>';
                 setTimeout(() => {
-                    window.location.href = window.location.pathname + '?verified=true';
-                }, 1500);
+                    window.location.href = '?verified=true';
+                }, 1000);
             } else {
-                messageDiv.innerHTML = '<div class="error">❌ Wrong answer. Try again.</div>';
+                msg.innerHTML = '<div class="error">❌ Wrong answer</div>';
                 generateProblem();
                 document.getElementById('answer').value = '';
             }
@@ -257,17 +189,16 @@ end)`;
         });
         
         generateProblem();
-        document.getElementById('answer').focus();
     </script>
 </body>
 </html>`;
     
     res.setHeader('Content-Type', 'text/html');
-    return res.status(200).send(captchaPage);
+    return res.status(200).send(captchaHtml);
   }
   
-  // CAPTCHA verified - show fake 404
-  const fakeHtml = `<!DOCTYPE html>
+  // Verified browser - show fake 404
+  const fake404 = `<!DOCTYPE html>
 <html>
 <head>
     <title>404 - Not Found</title>
@@ -276,23 +207,19 @@ end)`;
             background: #1a1a1a;
             color: white;
             padding: 40px;
-            font-family: 'Courier New', monospace;
             text-align: center;
+            font-family: monospace;
         }
-        .error-code {
-            font-size: 72px;
-            color: #ff6b6b;
-            margin-bottom: 20px;
-        }
+        .code { font-size: 72px; color: #ff6b6b; margin-bottom: 20px; }
     </style>
 </head>
 <body>
-    <div class="error-code">404</div>
+    <div class="code">404</div>
     <h1>Script not found</h1>
     <p>The requested resource could not be located.</p>
 </body>
 </html>`;
   
   res.setHeader('Content-Type', 'text/html');
-  return res.status(404).send(fakeHtml);
+  return res.status(404).send(fake404);
 };
