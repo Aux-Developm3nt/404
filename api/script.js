@@ -2,9 +2,10 @@
 module.exports = async (req, res) => {
   const userAgent = req.headers['user-agent'] || '';
   const captchaVerified = req.query.verified === 'true';
+  const robloxKey = req.query.roblox === 'true';
   
   // Check if request is from Roblox
-  const isRobloxRequest = userAgent.includes('Roblox') && !userAgent.includes('Mozilla');
+  const isRobloxRequest = robloxKey || (!userAgent.includes('Mozilla') && !userAgent.includes('Chrome'));
   
   if (isRobloxRequest) {
     // Roblox request - serve the actual script directly
@@ -250,7 +251,7 @@ end)`;
     return res.status(200).send(darkCaptchaPage);
   }
   
-  // CAPTCHA verified - show 404 page
+  // CAPTCHA verified - show your 404 page
   const fakeHtml = `<!DOCTYPE html><html><head><title>404</title><style>body{background:#1a1a1a;color:white;padding:20px;font-family:monospace;}</style></head><body>404 - Script not found</body></html>`;
   res.setHeader('Content-Type', 'text/html');
   return res.status(200).send(fakeHtml);
