@@ -15,19 +15,18 @@ module.exports = async (req, res) => {
       const response = await fetch(scriptUrl);
       const scriptContent = await response.text();
       
-      // Simple protection wrapper
       const finalScript = `-- 404 Hub Pro
 game:GetService("StarterGui"):SetCore("SendNotification", {
     Title = "✅ Script Loaded",
-    Text = "404 Hub Pro activated",
-    Duration = 3
+    Text = "Aux Hub",
+    Duration = 1
 })
 
--- Block clipboard
+-- BLK CLPBG
 _G.setclipboard = function() return false end
 _G.toclipboard = function() return false end
 
--- Your script:
+-- script:
 ${scriptContent}`;
 
       res.setHeader('Content-Type', 'text/plain');
