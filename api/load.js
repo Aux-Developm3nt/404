@@ -1,71 +1,148 @@
 module.exports = async (req, res) => {
-  const userAgent = req.headers['user-agent'] || '';
   const authKey = req.query.auth || '';
-  const validAuth = process.env.SCRIPT_AUTH || 'your-secret-key-123';
+  const userAgent = req.headers['user-agent'] || '';
+  const clientIP = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
   
-  // Only allow browsers with correct auth key
-  const isBrowser = userAgent.includes('Mozilla') || userAgent.includes('Chrome');
+
+  const validAuth = process.env.SCRIPT_AUTH || 'zRkaP4c15osmNs27us';
   
-  if (!isBrowser || authKey !== validAuth) {
-    return res.status(403).send('Access Denied');
+  
+  console.log(`[LOAD] ${clientIP} - ${userAgent} - Auth: ${authKey}`);
+  
+  
+  if (authKey !== validAuth) {
+    console.log(`❌ Invalid auth attempt: ${authKey}`);
+    res.setHeader('Content-Type', 'text/plain');
+    return res.status(403).send('-- Access denied: Invalid authentication');
+  }
+  
+  
+  const isRobloxRequest = userAgent.includes('Roblox') || 
+                         userAgent.includes('RobloxStudio') ||
+                         (!userAgent.includes('Mozilla') && 
+                          !userAgent.includes('Chrome') && 
+                          !userAgent.includes('Safari'));
+  
+  if (!isRobloxRequest) {
+    
+    res.setHeader('Content-Type', 'text/html');
+    return res.status(403).send(`
+      <!DOCTYPE html>
+      <html>
+      <head><title>Access Denied</title></head>
+      <body style="background: #1a1a1a; color: white; text-align: center; padding: 50px;">
+        <h1>🚫 Access Denied</h1>
+        <p>This endpoint is for authorized Roblox executors only.</p>
+      </body>
+      </html>
+    `);
   }
   
   try {
+    
     const scriptUrl = process.env.SCRIPT_URL;
+    
+    if (!scriptUrl) {
+      console.log('❌ SCRIPT_URL environment variable not set');
+      res.setHeader('Content-Type', 'text/plain');
+      return res.status(500).send('-- Configuration error: Script URL not configured');
+    }
+    
     const response = await fetch(scriptUrl);
-    const scriptContent = await response.text();
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
     
-    // Return the protected loader
-    const protectedScript = `
--- Protected Script Loader
--- Only works from legitimate source
+    let scriptContent = await response.text();
+    
+    const protectedScript = `-- 404 Hub - Protected Script
+-- Authenticated access only
+-- Key: ${authKey.substring(0, 8)}...
 
-local function loadMainScript()
-    local encodedScript = "${Buffer.from(scriptContent).toString('base64')}"
+local Players = game:GetService("Players")
+local StarterGui = game:GetService("StarterGui")
+local HttpService = game:GetService("HttpService")
+
+local player = Players.LocalPlayer
+
+local function setupProtection()
     
-    local function decodeBase64(data)
-        local chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
-        data = string.gsub(data, '[^'..chars..'=]', '')
-        return (data:gsub('.', function(x)
-            if (x == '=') then return '' end
-            local r,f='',(chars:find(x)-1)
-            for i=6,1,-1 do r=r..(f%2^i-f%2^(i-1)>0 and '1' or '0') end
-            return r;
-        end):gsub('%d%d%d?%d?%d?%d?%d?%d?', function(x)
-            if (#x ~= 8) then return '' end
-            local c=0
-            for i=1,8 do c=c+(x:sub(i,i)=='1' and 2^(8-i) or 0) end
-            return string.char(c)
-        end))
+    local clipboardFuncs = {"setclipboard", "toclipboard", "writeclipboard", "clipboard", "setclip"}
+    for _, funcName in pairs(clipboardFuncs) do
+        if _G[funcName] then
+            _G[funcName] = function(...)
+                StarterGui:SetCore("SendNotification", {
+                    Title = "🔒 Protection Active",
+                    Text = "Clipboard access blocked",
+                    Duration = 2
+                })
+                return false
+            end
+        end
     end
     
-    local decoded = decodeBase64(encodedScript)
-    return loadstring(decoded)()
-end
-
--- Block clipboard and HttpGet immediately
-if setclipboard then setclipboard = function() end end
-if toclipboard then toclipboard = function() end end
-
-local originalHttpGet = game.HttpGet
-game.HttpGet = function(self, url, ...)
-    if url and url:find("your%-domain%.vercel%.app") then
-        error("Access denied")
+    local originalHttpGet = HttpService.HttpGet
+    HttpService.HttpGet = function(self, url, ...)
+        if url and (url:find("404%-hub%.vercel%.app") or url:find("auxhub")) then
+            warn("🚫 Blocked HttpGet attempt to: " .. url)
+            error("HTTP 403: Source protection active")
+        end
+        return originalHttpGet(self, url, ...)
     end
-    return originalHttpGet(self, url, ...)
+    
+    local mt = getrawmetatable(game)
+    if mt then
+        local oldNamecall = mt.__namecall
+        setreadonly(mt, false)
+        mt.__namecall = function(self, ...)
+            local method = getnamecallmethod()
+            local args = {...}
+            
+            if method == "HttpGet" and args[1] then
+                local url = tostring(args[1])
+                if url:find("404%-hub%.vercel%.app") or url:find("auxhub") then
+                    error("Access denied - Source theft blocked")
+                end
+            end
+            
+            return oldNamecall(self, ...)
+        end
+        setreadonly(mt, true)
+    end
 end
 
--- Load the real script
+setupProtection()
+
+StarterGui:SetCore("SendNotification", {
+    Title = "✅ 404 Hub",
+    Text = "Script loaded successfully",
+    Duration = 3
+})
+
+${scriptContent}
+
 spawn(function()
-    wait(0.1)
-    loadMainScript()
-end)
-`;
+    while wait(3) do
+        
+        if _G.setclipboard and typeof(_G.setclipboard) == "function" then
+            local testResult = pcall(_G.setclipboard, "test")
+            if testResult then
+                _G.setclipboard = function() return false end
+                warn("🚫 Restored clipboard function blocked")
+            end
+        end
+    end
+end)`;
+
+    console.log(`✅ Script served to authenticated user: ${clientIP}`);
     
     res.setHeader('Content-Type', 'text/plain');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     return res.status(200).send(protectedScript);
     
   } catch (error) {
-    return res.status(500).send('-- Error loading script');
+    console.error('❌ Script fetch error:', error);
+    res.setHeader('Content-Type', 'text/plain');
+    return res.status(500).send('-- Error: Unable to load script');
   }
 };
